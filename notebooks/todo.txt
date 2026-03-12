@@ -1,0 +1,13 @@
+TO DO LIST:
+
+
+Functional:
+- STORE Elo_long and elo_df in data
+- PRODUCE top teams by end of season LIST
+- STORE useful parameters (K, file count etc.)
+
+Aesthetic:
+- Clean up graph, date labels for seasons?
+- Other plots?
+
+Features:
