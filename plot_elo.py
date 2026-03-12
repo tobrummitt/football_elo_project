@@ -10,15 +10,15 @@ def main():
 
     plot_elo_over_time(
         elo_long=plot_df,
-        highlight_teams=["Newcastle"],
+        highlight_teams=["Arsenal","Chelsea","Liverpool","Man City", "Man United", "Tottenham"],
         smooth_games=5,
         resample_rule="MS",  # Options: "MS" monthly, "W" weekly
         show_all_teams_faint=True,
-        title="Newcastle United All Time Premier League Elo",
-        outpath="figures/nufc_alltime_pl_elo.png",
+        title="The Big 6 All Time Premier League Elo",
+        outpath="figures/big6_alltime_pl_elo.png",
     )
 
-    print("[OK] Wrote figures/nufc_alltime_pl_elo.png")
+    print("[OK] Wrote figures/big6_alltime_pl_elo.png")
 
 def filter_elo_data(
     elo_long: pd.DataFrame,
