@@ -5,15 +5,48 @@ import matplotlib.pyplot as plt
 
 def add_season_column(df: pd.DataFrame, date_col: str = "Date") -> pd.DataFrame:
     """
-    Premier League season runs Aug–May. Label season by its start year.
-    Example: 2022-09-01 -> Season 2022 (i.e., 2022–23).
+    Premier League season runs Aug–May so create a Season Start and Season column
+    Example: 2022-09-01 -> Season Start: 2022, Season: 2022-2023
     """
     out = df.copy()
     out[date_col] = pd.to_datetime(out[date_col])
 
-    start_year = out[date_col].dt.year - (out[date_col].dt.month < 8)
+    season_start = out[date_col].dt.year - (out[date_col].dt.month < 8)
 
-    out["Season"] = start_year.astype(str) + "-" + (start_year + 1).astype(str).str[-2:]
+    out["SeasonStart"] = season_start.astype("int16")
+    out["Season"] = season_start.astype(str) + "-" + (season_start + 1).astype(str).str[-2:]
+
+    return out
+
+def add_spell_column(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add a Spell column so lines stay connected across consecutive seasons
+    and break when a team misses one or more seasons.
+    """
+    out = df.copy()
+
+    # Unique team-season combinations
+    team_seasons = (
+        out[["Team", "SeasonStart"]]
+        .drop_duplicates()
+        .sort_values(["Team", "SeasonStart"])
+    )
+
+    # New spell whenever season gap > 1
+    team_seasons["LeagueSpell"] = (
+        team_seasons.groupby("Team")["SeasonStart"]
+        .diff()
+        .gt(1)
+        .groupby(team_seasons["Team"])
+        .cumsum()
+        .astype(int)
+    )
+
+    out = out.merge(
+        team_seasons[["Team", "SeasonStart", "LeagueSpell"]],
+        on=["Team","SeasonStart"],
+        how="left",
+    )
 
     return out
 
@@ -23,8 +56,9 @@ def prep_monthly_smoothed_elo(
     resample_rule: str = "W",  # Week start. Alternatives: "MS" month start, "M" month end
 ) -> pd.DataFrame:
     """
-    Smooth Elo per team (rolling by matches) then reduce to monthly snapshots for cleaner lines.
-    Expected columns: Date, Team, Elo
+    Smooth Elo per team, resample within each team-season,
+    and assign a Spell so plotting breaks across missed seasons
+    but stays joined across consecutive seasons in the league.
     """
     df = elo_long[["Date", "Team", "EloPost"]].copy()
     df["Date"] = pd.to_datetime(df["Date"])
@@ -32,14 +66,18 @@ def prep_monthly_smoothed_elo(
 
     # 5-game rolling average per team (match-based smoothing)
     df["EloSmooth"] = (
-        df.groupby("Team")["EloPost"]
+        df.groupby("Team", sort=False)["EloPost"]
           .transform(lambda s: s.rolling(window=smooth_games, min_periods=1).mean())
     )
 
-    # Monthly snapshot per team
-    df = df.set_index("Date")
+    # Add season metadata and continuous participation blocks
+    df = add_season_column(df)
+    df = add_spell_column(df)
+
+    # Resample only within each continous spell
     out = (
-        df.groupby("Team")["EloSmooth"]
+        df.set_index("Date")
+          .groupby(["Team", "LeagueSpell"])["EloSmooth"]
           .resample(resample_rule)
           .last()
           .ffill()
@@ -47,9 +85,10 @@ def prep_monthly_smoothed_elo(
           .rename(columns={"EloSmooth": "Elo"})
     )
 
-    out["Date"] = pd.to_datetime(out["Date"])
+    # Re-attach season labels after resampling
     out = add_season_column(out)
-    out = out.sort_values(["Team", "Date"]).reset_index(drop=True)
+
+    out = out.sort_values(["Team", "LeagueSpell", "Date"]).reset_index(drop=True)
     return out
 
 
@@ -67,6 +106,7 @@ def plot_elo_over_time(
     - 5-game rolling smoothing (match-based)
     - resampled snapshots (weekly, monthly etc.)
     - alternating grey season shading
+    - line breaks when teams relegated, lines reconnect across consecutive seasons
     - optional faint lines for all other teams + highlighted teams on top
     """
     df = prep_monthly_smoothed_elo(
@@ -99,7 +139,6 @@ def plot_elo_over_time(
     for i, start in enumerate(start_dates):
         end = start_dates[i + 1] if i + 1 < len(start_dates) else last_date
 
-        # alternate shading; on black, use a light gray with low alpha
         if i % 2 == 0:
             ax.axvspan(start, end, color="white", alpha=0.10)
 
@@ -111,10 +150,12 @@ def plot_elo_over_time(
 
     ax.tick_params(axis="x", direction="out", length=5)
 
-    # --- Plot all teams faintly for context ---
+    highlight_set = set(highlight_teams)
+
+    # Plot non-highlighted teams faintly, split by LeagueSpell
     if show_all_teams_faint:
-        for team, tdf in df.groupby("Team"):
-            if team in highlight_teams:
+        for (team, _spell), tdf in df.groupby(["Team", "LeagueSpell"], sort=False):
+            if team in highlight_set:
                 continue
             ax.plot(tdf["Date"], tdf["Elo"], linewidth=1, alpha=0.12, color="white")
 
@@ -130,18 +171,24 @@ def plot_elo_over_time(
         "Tottenham": "#132257"
     }
 
-    # --- Plot highlighted teams on top ---
+    # Plot highlighted teams, split by LeagueSpell
     for team in highlight_teams:
-        tdf = df[df["Team"] == team]
-        if tdf.empty:
+        team_df = df[df["Team"] == team]
+        if team_df.empty:
             continue
-        ax.plot(
-            tdf["Date"],
-            tdf["Elo"], 
-            linewidth=2.6, 
-            label=team,
-            color=team_colors.get(team, None)
-        )
+
+        color = team_colors.get(team, None)
+        first_segment = True
+
+        for _, seg in team_df.groupby("LeagueSpell", sort=True):
+            ax.plot(
+                seg["Date"],
+                seg["Elo"], 
+                linewidth=2.6, 
+                label=team if first_segment else None,
+                color=color
+            )
+            first_segment = False
 
     ax.set_title(title)
     ax.set_xlabel("Date")
