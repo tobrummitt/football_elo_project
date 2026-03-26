@@ -127,13 +127,3 @@ def run_elo(matches: pd.DataFrame, config: EloConfig = EloConfig()) -> tuple[pd.
     )
 
     return elo_df, elo_long
-
-
-def save_elo_long_csv(
-    matches: pd.DataFrame,
-    outpath: str = "data/elo_long.csv",
-    config: EloConfig = EloConfig(),
-) -> None:
-    """Convenience wrapper to run Elo and save elo_long to CSV."""
-    _, elo_long = run_elo(matches=matches, config=config)
-    elo_long.to_csv(outpath, index=False)

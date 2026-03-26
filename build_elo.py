@@ -1,14 +1,27 @@
 from src.ingest import load_matches
-from src.elo import save_elo_long_csv, EloConfig
+from src.elo import run_elo, EloConfig
+from src.evaluation import evaluate_model, save_metrics
 
 def main():
     matches = load_matches()
     cfg = EloConfig(initial_elo=1500, k=20, home_advantage=60)
 
-    save_elo_long_csv(matches, outpath="data/elo_long.csv", config=cfg)
+    # Build Elo outputs
+    elo_df, elo_long = run_elo(matches, config=cfg)
+
+    # Save datasets
+    elo_df.to_csv("data/elo_df.csv", index=False)
+    elo_long.to_csv("data/elo_long.csv", index=False)
 
     print("Saved data/elo_long.csv")
     print("Matches loaded:", len(matches))
+
+    # Evaluate Model and save the metrics to a csv file
+    metrics = evaluate_model(elo_df)
+    print(metrics)
+
+    save_metrics(metrics, model_name="baseline")
+
 
 if __name__ == "__main__":
     main()
