@@ -1,2 +1,4 @@
-model,accuracy,brier_score
-baseline,0.599,0.2334
+model,accuracy,brier_score,matches_used,cutoff_season
+baseline,0.599,0.2334,12234,1993
+baseline_cutoff_1,0.6033,0.2323,11772,1994
+baseline_cutoff_2,0.6057,0.2318,11310,1995
