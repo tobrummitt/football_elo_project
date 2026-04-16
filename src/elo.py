@@ -14,6 +14,28 @@ def expected_score(rating_a: float, rating_b: float) -> float:
     """Classic Elo expected score."""
     return 1.0 / (1.0 + 10.0 ** ((rating_b - rating_a) / 400.0))
 
+def add_season_column(df: pd.DataFrame, date_col: str = "Date") -> pd.DataFrame:
+    """
+    Premier League season runs Aug–May so create a Season Start and Season column
+    Example: 2022-09-01 -> Season Start: 2022, Season: 2022-2023
+    """
+    out = df.copy()
+    out[date_col] = pd.to_datetime(out[date_col])
+
+    season_start = (out[date_col].dt.year - (out[date_col].dt.month < 8)).astype("int16")
+    season = season_start.astype(str) + "-" + (season_start + 1).astype(str).str[-2:]
+
+    # Insert as first 2 columns
+    if "SeasonStart" in out.columns:
+        out.drop(columns=["SeasonStart"], inplace=True)
+
+    if "Season" in out.columns:
+        out.drop(columns=["Season"], inplace=True)
+
+    out.insert(0, "SeasonStart", season_start)
+    out.insert(1, "Season", season)
+    
+    return out
 
 def run_elo(matches: pd.DataFrame, config: EloConfig = EloConfig()) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
@@ -86,6 +108,7 @@ def run_elo(matches: pd.DataFrame, config: EloConfig = EloConfig()) -> tuple[pd.
         })
 
     elo_df = pd.DataFrame(rows)
+    elo_df = add_season_column(elo_df)
 
     # Build long table (2 rows per match)
     home_long = elo_df[[
@@ -125,5 +148,7 @@ def run_elo(matches: pd.DataFrame, config: EloConfig = EloConfig()) -> tuple[pd.
           .sort_values(["Team", "Date"])
           .reset_index(drop=True)
     )
+
+    elo_long = add_season_column(elo_long)
 
     return elo_df, elo_long

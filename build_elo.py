@@ -17,10 +17,10 @@ def main():
     print("Matches loaded:", len(matches))
 
     # Evaluate Model and save the metrics to a csv file
-    metrics = evaluate_model(elo_df)
+    metrics = evaluate_model(elo_df,exclude_first_n_seasons=2)
     print(metrics)
 
-    save_metrics(metrics, model_name="baseline")
+    save_metrics(metrics, model_name="baseline_cutoff_2")
 
 
 if __name__ == "__main__":

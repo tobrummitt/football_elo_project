@@ -29,9 +29,7 @@ def filter_elo_data(
 ) -> pd.DataFrame:
     df = elo_long.copy()
     df["Date"] = pd.to_datetime(df["Date"])
-
-    df["Season"] = df["Date"].dt.year
-    df.loc[df["Date"].dt.month < 8, "Season"] -= 1
+    df["SeasonStart"] = df["SeasonStart"].astype(int)
 
     if start_date is not None:
         df = df[df["Date"] >= pd.Timestamp(start_date)]
@@ -40,10 +38,10 @@ def filter_elo_data(
         df = df[df["Date"] <= pd.Timestamp(end_date)]
 
     if start_season is not None:
-        df = df[df["Season"] >= start_season]
+        df = df[df["SeasonStart"] >= start_season]
 
     if end_season is not None:
-        df = df[df["Season"] <= end_season]
+        df = df[df["SeasonStart"] <= end_season]
 
     return df
 

@@ -3,21 +3,6 @@ from __future__ import annotations
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def add_season_column(df: pd.DataFrame, date_col: str = "Date") -> pd.DataFrame:
-    """
-    Premier League season runs Aug–May so create a Season Start and Season column
-    Example: 2022-09-01 -> Season Start: 2022, Season: 2022-2023
-    """
-    out = df.copy()
-    out[date_col] = pd.to_datetime(out[date_col])
-
-    season_start = out[date_col].dt.year - (out[date_col].dt.month < 8)
-
-    out["SeasonStart"] = season_start.astype("int16")
-    out["Season"] = season_start.astype(str) + "-" + (season_start + 1).astype(str).str[-2:]
-
-    return out
-
 def add_spell_column(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add a Spell column so lines stay connected across consecutive seasons
@@ -60,7 +45,7 @@ def prep_monthly_smoothed_elo(
     and assign a Spell so plotting breaks across missed seasons
     but stays joined across consecutive seasons in the league.
     """
-    df = elo_long[["Date", "Team", "EloPost"]].copy()
+    df = elo_long[["Date", "Team", "EloPost", "SeasonStart", "Season"]].copy()
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.sort_values(["Team", "Date"]).reset_index(drop=True)
 
@@ -70,23 +55,19 @@ def prep_monthly_smoothed_elo(
           .transform(lambda s: s.rolling(window=smooth_games, min_periods=1).mean())
     )
 
-    # Add season metadata and continuous participation blocks
-    df = add_season_column(df)
+    # Add continuous participation blocks
     df = add_spell_column(df)
 
     # Resample only within each continous spell
     out = (
         df.set_index("Date")
-          .groupby(["Team", "LeagueSpell"])["EloSmooth"]
+          .groupby(["Team", "LeagueSpell", "SeasonStart","Season"])["EloSmooth"]
           .resample(resample_rule)
           .last()
           .ffill()
           .reset_index()
           .rename(columns={"EloSmooth": "Elo"})
     )
-
-    # Re-attach season labels after resampling
-    out = add_season_column(out)
 
     out = out.sort_values(["Team", "LeagueSpell", "Date"]).reset_index(drop=True)
     return out
@@ -130,8 +111,9 @@ def plot_elo_over_time(
         spine.set_alpha(0.25)
 
     # --- Season shading (alternating) ---
-    season_starts = df.groupby("Season")["Date"].min().sort_values()
-    seasons = season_starts.index.to_list()
+    season_starts = (df.groupby(["SeasonStart", "Season"])["Date"].min().sort_values())
+
+    season_labels = [idx[1] for idx in season_starts.index]
     start_dates = season_starts.to_list()
     last_date = df["Date"].max()
 
@@ -146,7 +128,7 @@ def plot_elo_over_time(
         season_midpoints.append(midpoint)
 
     ax.set_xticks(season_midpoints)
-    ax.set_xticklabels(seasons, rotation=45, ha="right", color="white")
+    ax.set_xticklabels(season_labels, rotation=45, ha="right", color="white")
 
     ax.tick_params(axis="x", direction="out", length=5)
 
